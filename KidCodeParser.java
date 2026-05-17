@@ -23,19 +23,42 @@ public class KidCodeParser {
 private void initializeTable() {
  //1. Follow Sets (For Epsilon Handling)
     String[] followStmtList = {"THEEND", "DONE", "ELSE"};
-    String[] followExpr = {")", "DONE", "==", "!=", "<", ">", "<=", ">=", ",", "THEEND", "SAY", "IF", "WHILE", "REPEAT", "ID"};
+    String[] followExpr = {")", "DONE", "==", "!=", "<", ">", "<=", ">=", ",", "THEEND", "SAY", "IF", "WHILE", "REPEAT", "ID", "DO", "THEN", "BACK", "GIVE"};
 
     // 2. Program Structure
     addRule("Program", new String[]{"START"}, new String[]{"START", "StmtList", "THEEND", "Skills"});
     addRule("Skills", new String[]{"SKILL"}, new String[]{"SkillDecl", "Skills"});
     addRule("Skills", new String[]{"$"}, new String[]{});
+     addRule("SkillDecl", new String[]{"SKILL"}, 
+    new String[]{"SKILL", "ID", "(", "ParamList", ")", "StmtList", "DONE"});
 
+    addRule("SkillCall", new String[]{"DO"}, 
+    new String[]{"DO", "ID", "(", "ArgList", ")"});
+
+    addRule("ArgList", new String[]{"ID","INT","FLOAT","STRING","TRUE","FALSE","("}, 
+    new String[]{"Expr", "ArgList'"});
+addRule("ArgList", new String[]{")"}, 
+    new String[]{}); // epsilon - no arguments
+
+    // ArgList' → , Expr ArgList' | ε
+addRule("ArgList'", new String[]{","}, 
+    new String[]{",", "Expr", "ArgList'"});
+addRule("ArgList'", new String[]{")"}, 
+    new String[]{}); // epsilon
+
+addRule("ParamList", new String[]{"NUMBER","NAME","FACT"}, 
+    new String[]{"Type", "ID", "ParamList'"});
+addRule("ParamList'", new String[]{","}, 
+    new String[]{",", "Type", "ID", "ParamList'"});
+addRule("ParamList'", new String[]{")"}, 
+    new String[]{});  // epsilon
     // 3. Statement List 
     // This tells the parser: "If you see a type or a keyword, it's a statement. Keep going."
-    String[] firstStmt = {"NUMBER", "NAME", "FACT", "ID", "IF", "REPEAT", "WHILE", "SAY", "DO"};
+    String[] firstStmt = {"NUMBER", "NAME", "FACT", "ID", "IF", "REPEAT", "WHILE", "SAY", "DO", "GIVE"};
     addRule("StmtList", firstStmt, new String[]{"Stmt", "StmtList"});
     addRule("StmtList", followStmtList, new String[]{}); // Only stop at these!
-
+addRule("Stmt", new String[]{"GIVE"}, new String[]{"ReturnStmt"});
+addRule("ReturnStmt", new String[]{"GIVE"}, new String[]{"GIVE", "BACK", "Expr"});
     // 4. Statement Types
     addRule("Stmt", new String[]{"NUMBER", "NAME", "FACT"}, new String[]{"Decl"});
     addRule("Stmt", new String[]{"ID"}, new String[]{"Assign"});
