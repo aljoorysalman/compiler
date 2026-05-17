@@ -62,8 +62,7 @@ public class KidCode {
         private static final String INTEGER = "[+-]?" + DIGIT + "+";
         private static final String STRING = "\"([^\"\\\\]|\\\\.)*\"";
         private static final String OPERATORS = "==|!=|<=|>=|\\+|-|\\*|/|=|<|>|\\^|%";
-        private static final String DELIMITERS = "[\\.\\(\\)\\{\\};:]";
-        // compiled pattern
+        private static final String DELIMITERS = "[\\.\\(\\)\\{\\};:\\,]";       
         private static final Pattern PATTERN_IDENTIFIER = Pattern.compile("^" + IDENTIFIER);
         private static final Pattern PATTERN_FLOAT = Pattern.compile("^" + FLOAT);
         private static final Pattern PATTERN_INTEGER = Pattern.compile("^" + INTEGER);

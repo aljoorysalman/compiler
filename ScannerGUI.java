@@ -13,7 +13,7 @@ public class ScannerGUI extends JFrame {
             new String[] { "Type", "Line", "Value" }, 0));
 
  JTable symbolTable = new JTable(new DefaultTableModel(
-    new String[] { "Identifier", "Type", "Scope", "Line", "Return", "Params" }, 0));
+    new String[] { "Identifier", "Type", "Scope", "Line", "Return", "Param Count", "Param Types"}, 0));
     public ScannerGUI() {
         setTitle("Kid-Code Compiler");
         setSize(900, 700);
@@ -110,17 +110,24 @@ public class ScannerGUI extends JFrame {
         semantic.analyze();
 
           // Refresh symbol table with enhanced data
-                symbolModel.setRowCount(0);
+// Refresh symbol table with enhanced data matching 5.1.1 rules
+symbolModel.setRowCount(0);
 for (KidCodeSemantic.SymbolEntry e4 : semantic.getAllEntries()) {
+    
+    // Determine what to display for non-skill variables
+    String returnVal = e4.type.equals("skill") ? (e4.returnType != null ? e4.returnType : "void") : "-";
+    String pCount    = e4.type.equals("skill") ? String.valueOf(e4.paramCount) : "-";
+    String pTypes    = e4.type.equals("skill") ? (e4.paramTypes.isEmpty() ? "none" : e4.paramTypes.toString()) : "-";
+
     symbolModel.addRow(new Object[] {
         e4.name,
         e4.type,
         e4.scope,
         e4.line,
-        e4.returnType != null ? e4.returnType : "-",
-        e4.paramTypes.isEmpty() ? "-" : e4.paramTypes.toString()
+        returnVal,  // Displays "number", "name", etc.
+        pCount,     // Satisfies: Parameter Count
+        pTypes      // Satisfies: Parameter Types (e.g., "[number, number]")
     });
-
 }
 
 

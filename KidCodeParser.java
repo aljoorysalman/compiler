@@ -4,12 +4,10 @@ public class KidCodeParser {
     private List<KidCode.Token> tokens; 
     private int index = 0;
     private Stack<String> stack = new Stack<>();
-    // Stack to track the current parent node in the tree
     private Stack<ParseTreeNode> nodeStack = new Stack<>();
     private Map<String, Map<String, String[]>> table = new HashMap<>();
 
     private StringBuilder parseTreeLog = new StringBuilder();
-    //  Reference to the root of the tree
     private ParseTreeNode root;
 
     public KidCodeParser(List<KidCode.Token> tokens) {
@@ -18,122 +16,134 @@ public class KidCodeParser {
     }
 
     public ParseTreeNode getRoot() {
-    return root;
-}
-private void initializeTable() {
- //1. Follow Sets (For Epsilon Handling)
-    String[] followStmtList = {"THEEND", "DONE", "ELSE"};
-    String[] followExpr = {")", "DONE", "==", "!=", "<", ">", "<=", ">=", ",", "THEEND", "SAY", "IF", "WHILE", "REPEAT", "ID", "DO", "THEN", "BACK", "GIVE"};
+        return root;
+    }
 
-    // 2. Program Structure
-    addRule("Program", new String[]{"START"}, new String[]{"START", "StmtList", "THEEND", "Skills"});
-    addRule("Skills", new String[]{"SKILL"}, new String[]{"SkillDecl", "Skills"});
-    addRule("Skills", new String[]{"$"}, new String[]{});
-     addRule("SkillDecl", new String[]{"SKILL"}, 
-    new String[]{"SKILL", "ID", "(", "ParamList", ")", "StmtList", "DONE"});
+    private void initializeTable() {
+        String[] firstStmt = {"NUMBER", "NAME", "FACT", "ID", "IF", "REPEAT", "WHILE", "SAY", "DO", "GIVE", "SKILL"};
+        String[] followStmtList = {"THEEND", "DONE", "ELSE"};
+String[] followExpr = {
+    // Delimiters & Structural Block Boundaries
+    ")", "DONE", ",", "THEEND", "THEN", "DO", 
+    
+    // Relational Operators (Allows Expr' to yield gracefully inside conditions)
+    "==", "!=", "<", ">", "<=", ">=", 
+    
+    // Next Statement Starters
+    "NUMBER", "NAME", "FACT", "ID", "SAY", "IF", "WHILE", "REPEAT", "BACK", "GIVE", "GIVES","SKILL"
+};
 
-    addRule("SkillCall", new String[]{"DO"}, 
-    new String[]{"DO", "ID", "(", "ArgList", ")"});
+String[] followPower = {"+", "-", "*", "/", "%", ")", "DONE", ",", "THEEND", "THEN", "DO", "NUMBER", "NAME", "FACT", "ID", "SAY", "IF", "WHILE", "REPEAT", "BACK", "GIVE", "GIVES", "==", "!=", "<", ">", "<=", ">=","SKILL"};
+String[] followTerm  = {"+", "-", ")", "DONE", ",", "THEEND", "THEN", "DO", "NUMBER", "NAME", "FACT", "ID", "SAY", "IF", "WHILE", "REPEAT", "BACK", "GIVE", "GIVES", "==", "!=", "<", ">", "<=", ">=","SKILL"};
+      addRule("Stmt", new String[]{"SKILL"}, new String[]{"SkillDecl"});
 
-    addRule("ArgList", new String[]{"ID","INT","FLOAT","STRING","TRUE","FALSE","("}, 
-    new String[]{"Expr", "ArgList'"});
-addRule("ArgList", new String[]{")"}, 
-    new String[]{}); // epsilon - no arguments
+// 2. Program Structure
+        addRule("Program", new String[]{"START"}, new String[]{"START", "StmtList", "THEEND", "Skills"});
+        addRule("Skills", new String[]{"SKILL"}, new String[]{"SkillDecl", "Skills"});
+        addRule("Skills", new String[]{"$"}, new String[]{});
+      addRule("SkillDecl", new String[]{"SKILL"}, 
+    new String[]{"SKILL", "ID", "(", "ParamList", ")", "GIVES", "Type", "StmtList", "DONE"});
+        addRule("SkillCall", new String[]{"DO"}, new String[]{"DO", "ID", "(", "ArgList", ")"});
 
-    // ArgList' → , Expr ArgList' | ε
-addRule("ArgList'", new String[]{","}, 
-    new String[]{",", "Expr", "ArgList'"});
-addRule("ArgList'", new String[]{")"}, 
-    new String[]{}); // epsilon
+        addRule("ArgList", new String[]{"ID","INT","FLOAT","STRING","TRUE","FALSE","("}, new String[]{"Expr", "ArgList'"});
+        addRule("ArgList", new String[]{")"}, new String[]{}); 
 
-addRule("ParamList", new String[]{"NUMBER","NAME","FACT"}, 
-    new String[]{"Type", "ID", "ParamList'"});
-addRule("ParamList'", new String[]{","}, 
-    new String[]{",", "Type", "ID", "ParamList'"});
-addRule("ParamList'", new String[]{")"}, 
-    new String[]{});  // epsilon
-    // 3. Statement List 
-    // This tells the parser: "If you see a type or a keyword, it's a statement. Keep going."
-    String[] firstStmt = {"NUMBER", "NAME", "FACT", "ID", "IF", "REPEAT", "WHILE", "SAY", "DO", "GIVE"};
-    addRule("StmtList", firstStmt, new String[]{"Stmt", "StmtList"});
-    addRule("StmtList", followStmtList, new String[]{}); // Only stop at these!
-addRule("Stmt", new String[]{"GIVE"}, new String[]{"ReturnStmt"});
-addRule("ReturnStmt", new String[]{"GIVE"}, new String[]{"GIVE", "BACK", "Expr"});
-    // 4. Statement Types
-    addRule("Stmt", new String[]{"NUMBER", "NAME", "FACT"}, new String[]{"Decl"});
-    addRule("Stmt", new String[]{"ID"}, new String[]{"Assign"});
-    addRule("Stmt", new String[]{"IF"}, new String[]{"IfStmt"});
-    addRule("Stmt", new String[]{"REPEAT"}, new String[]{"RepeatStmt"});
-    addRule("Stmt", new String[]{"WHILE"}, new String[]{"WhileStmt"});
-    addRule("Stmt", new String[]{"SAY"}, new String[]{"SayStmt"});
-    addRule("Stmt", new String[]{"DO"}, new String[]{"SkillCall"});
+        addRule("ArgList'", new String[]{","}, new String[]{",", "Expr", "ArgList'"});
+        addRule("ArgList'", new String[]{")"}, new String[]{}); 
 
-    // 5. Declaration & Assignment
-    addRule("Decl", new String[]{"NUMBER", "NAME", "FACT"}, new String[]{"Type", "ID", "=", "Expr"});
-    addRule("Assign", new String[]{"ID"}, new String[]{"ID", "=", "Expr"});
-    addRule("Type", new String[]{"NUMBER"}, new String[]{"NUMBER"});
-    addRule("Type", new String[]{"NAME"}, new String[]{"NAME"});
-    addRule("Type", new String[]{"FACT"}, new String[]{"FACT"});
+        addRule("ParamList", new String[]{"NUMBER","NAME","FACT"}, new String[]{"Type", "ID", "ParamList'"});
+        addRule("ParamList'", new String[]{","}, new String[]{",", "Type", "ID", "ParamList'"});
+        addRule("ParamList'", new String[]{")"}, new String[]{});  
+        
+        // 3. Statement List 
 
-    // 6. Arithmetic (The Expression Chain)
-    String[] firstFactor = {"ID", "INT", "FLOAT", "STRING", "TRUE", "FALSE", "(", "DO"};
+        addRule("StmtList", firstStmt, new String[]{"Stmt", "StmtList"});
+        addRule("StmtList", followStmtList, new String[]{}); 
+        addRule("Stmt", new String[]{"GIVE"}, new String[]{"ReturnStmt"});
+        addRule("ReturnStmt", new String[]{"GIVE"}, new String[]{"GIVE", "BACK", "Expr"});
+        
+        // 4. Statement Types
+        addRule("Stmt", new String[]{"NUMBER", "NAME", "FACT"}, new String[]{"Decl"});
+        addRule("Stmt", new String[]{"ID"}, new String[]{"Assign"});
+        addRule("Stmt", new String[]{"IF"}, new String[]{"IfStmt"});
+        addRule("Stmt", new String[]{"REPEAT"}, new String[]{"RepeatStmt"});
+        addRule("Stmt", new String[]{"WHILE"}, new String[]{"WhileStmt"});
+        addRule("Stmt", new String[]{"SAY"}, new String[]{"SayStmt"});
+        addRule("Stmt", new String[]{"DO"}, new String[]{"SkillCall"});
 
-    addRule("Expr", firstFactor, new String[]{"Term", "Expr'"});
-    addRule("Expr'", new String[]{"+"}, new String[]{"+", "Term", "Expr'"});
-    addRule("Expr'", new String[]{"-"}, new String[]{"-", "Term", "Expr'"});
-    addRule("Expr'", followExpr, new String[]{}); // Epsilon
+        // 5. Declaration & Assignment
+        addRule("Decl", new String[]{"NUMBER", "NAME", "FACT"}, new String[]{"Type", "ID", "=", "Expr"});
+        addRule("Assign", new String[]{"ID"}, new String[]{"ID", "=", "Expr"});
+        addRule("Type", new String[]{"NUMBER"}, new String[]{"NUMBER"});
+        addRule("Type", new String[]{"NAME"}, new String[]{"NAME"});
+        addRule("Type", new String[]{"FACT"}, new String[]{"FACT"});
 
-    addRule("Term", firstFactor, new String[]{"Power", "Term'"});
-    addRule("Term'", new String[]{"*"}, new String[]{"*", "Power", "Term'"});
-    addRule("Term'", new String[]{"/"}, new String[]{"/", "Power", "Term'"});
-    addRule("Term'", new String[]{"%"}, new String[]{"%", "Power", "Term'"});
-    addRule("Term'", followExpr, new String[]{}); // Epsilon
+        // 6. Arithmetic (The Expression Chain)
+        String[] firstFactor = {"ID", "INT", "FLOAT", "STRING", "TRUE", "FALSE", "(", "DO"};
+       addRule("Expr", firstFactor, new String[]{"Term", "Expr'"});
+  
+addRule("Expr'", new String[]{"+"}, new String[]{"+", "Term", "Expr'"});
+addRule("Expr'", new String[]{"-"}, new String[]{"-", "Term", "Expr'"});
+addRule("Expr'", followExpr, new String[]{}); // Expr' ends on actual statement boundaries
 
-    addRule("Power", firstFactor, new String[]{"Factor", "Power'"});
-    addRule("Power'", new String[]{"^"}, new String[]{"^", "Factor", "Power'"});
-    addRule("Power'", followExpr, new String[]{}); // Epsilon
+addRule("Term'", new String[]{"*"}, new String[]{"*", "Power", "Term'"});
+addRule("Term'", new String[]{"/"}, new String[]{"/", "Power", "Term'"});
+addRule("Term'", new String[]{"%"}, new String[]{"%", "Power", "Term'"});
+addRule("Term'", followTerm, new String[]{}); // Term' drops down to catch + and -
 
-    // 7. Factor 
-    // 
-    addRule("Factor", new String[]{"INT"}, new String[]{"INT"});
-    addRule("Factor", new String[]{"FLOAT"}, new String[]{"FLOAT"});
-    addRule("Factor", new String[]{"ID"}, new String[]{"ID"});
-    addRule("Factor", new String[]{"STRING"}, new String[]{"STRING"});
-    addRule("Factor", new String[]{"TRUE"}, new String[]{"TRUE"});
-    addRule("Factor", new String[]{"FALSE"}, new String[]{"FALSE"});
-    addRule("Factor", new String[]{"("}, new String[]{"(", "Expr", ")"});
-    addRule("Factor", new String[]{"DO"}, new String[]{"SkillCall"});
+addRule("Power'", new String[]{"^"}, new String[]{"^", "Factor", "Power'"});
+addRule("Power'", followPower, new String[]{}); // Power' drops down to catch *, /, %
+        // Core terms
+        addRule("Term", firstFactor, new String[]{"Power", "Term'"});
+        addRule("Term'", new String[]{"*"}, new String[]{"*", "Power", "Term'"});
+        addRule("Term'", new String[]{"/"}, new String[]{"/", "Power", "Term'"});
+        addRule("Term'", new String[]{"%"}, new String[]{"%", "Power", "Term'"});
+        addRule("Term'", followExpr, new String[]{}); 
 
-    // 8. Control Flow & Output
-    addRule("SayStmt", new String[]{"SAY"}, new String[]{"SAY", "(", "Expr", ")"});
-    addRule("IfStmt", new String[]{"IF"}, new String[]{"IF", "(", "BoolExpr", ")", "THEN", "StmtList", "ElsePart", "DONE"});
-    addRule("ElsePart", new String[]{"ELSE"}, new String[]{"ELSE", "StmtList"});
-    addRule("ElsePart", new String[]{"DONE"}, new String[]{});
-    addRule("WhileStmt", new String[]{"WHILE"}, new String[]{"WHILE", "(", "BoolExpr", ")", "DO", "StmtList", "DONE"});
-    addRule("RepeatStmt", new String[]{"REPEAT"}, new String[]{"REPEAT", "(", "Expr", ")", "DO", "StmtList", "DONE"});
+        addRule("Power", firstFactor, new String[]{"Factor", "Power'"});
+        addRule("Power'", new String[]{"^"}, new String[]{"^", "Factor", "Power'"});
+        addRule("Power'", followExpr, new String[]{}); 
 
-    // 9. Booleans
-    addRule("BoolExpr", firstFactor, new String[]{"Expr", "Relop", "Expr"});
-    addRule("Relop", new String[]{"==", "!=", "<", ">", "<=", ">="}, new String[]{"(Matching Relational Operator)"});
-}
+        // 7. Factor 
+        addRule("Factor", new String[]{"INT"}, new String[]{"INT"});
+        addRule("Factor", new String[]{"FLOAT"}, new String[]{"FLOAT"});
+        addRule("Factor", new String[]{"ID"}, new String[]{"ID"});
+        addRule("Factor", new String[]{"STRING"}, new String[]{"STRING"});
+        addRule("Factor", new String[]{"TRUE"}, new String[]{"TRUE"});
+        addRule("Factor", new String[]{"FALSE"}, new String[]{"FALSE"});
+        addRule("Factor", new String[]{"("}, new String[]{"(", "Expr", ")"});
+        addRule("Factor", new String[]{"DO"}, new String[]{"SkillCall"});
+
+        // 8. Control Flow & Output
+        addRule("SayStmt", new String[]{"SAY"}, new String[]{"SAY", "(", "Expr", ")"});
+        addRule("IfStmt", new String[]{"IF"}, new String[]{"IF", "(", "BoolExpr", ")", "THEN", "StmtList", "ElsePart", "DONE"});
+        addRule("ElsePart", new String[]{"ELSE"}, new String[]{"ELSE", "StmtList"});
+        addRule("ElsePart", new String[]{"DONE"}, new String[]{});
+        addRule("WhileStmt", new String[]{"WHILE"}, new String[]{"WHILE", "(", "BoolExpr", ")", "DO", "StmtList", "DONE"});
+        addRule("RepeatStmt", new String[]{"REPEAT"}, new String[]{"REPEAT", "(", "Expr", ")", "DO", "StmtList", "DONE"});
 
 
+        addRule("Type", new String[]{"NUMBER"}, new String[]{"NUMBER"});
+addRule("Type", new String[]{"NAME"}, new String[]{"NAME"});
+addRule("Type", new String[]{"FACT"}, new String[]{"FACT"});
+addRule("Type", new String[]{"VOID"}, new String[]{"VOID"});
+        // 9. Booleans
+        addRule("BoolExpr", firstFactor, new String[]{"Expr", "Relop", "Expr"});
+        addRule("Relop", new String[]{"==", "!=", "<", ">", "<=", ">="}, new String[]{"(Matching Relational Operator)"});
+    }
 
     private void addRule(String nt, String[] terminals, String[] prod) {
         table.putIfAbsent(nt, new HashMap<>());
         for (String t : terminals) table.get(nt).put(t, prod);
     }
 
-
-public void parse() throws Exception {
-        // Initialize: Push $ then Start Symbol onto stack
+    public void parse() throws Exception {
         stack.push("$");
         stack.push("Program");
 
-        //  Initialize the Tree Root
-        root = new ParseTreeNode("Program");
-        nodeStack.push(null); // Corresponds to $
-        nodeStack.push(root); // Corresponds to "Program"
+        root = new ParseTreeNode("Program", 1);
+        nodeStack.push(null); 
+        nodeStack.push(root); 
 
         KidCode.Token currentToken = getNextToken();
         String a = getLookahead(currentToken);
@@ -142,9 +152,7 @@ public void parse() throws Exception {
         
         while (!stack.peek().equals("$")) {
             String X = stack.peek(); 
-            //  Get the current node we are working on
-            ParseTreeNode currentNode = nodeStack.pop();
-
+            
             if (isTerminal(X)) {
                 boolean isPlaceholderMatch = X.equals("(Matching Token)") && 
                     (a.equals("ID") || a.equals("INT") || a.equals("FLOAT") || a.equals("STRING") || a.equals("TRUE") || a.equals("FALSE"));
@@ -153,9 +161,12 @@ public void parse() throws Exception {
                     (a.equals("==") || a.equals("!=") || a.equals("<") || a.equals(">") || a.equals("<=") || a.equals(">="));
 
                 if (X.equals(a) || isPlaceholderMatch || isRelopMatch) {
+                    // FIX: Pop BOTH matching symbol and its matching node target synchronously
                     stack.pop();
-                    //  Update the tree node label with the actual value
+                    ParseTreeNode currentNode = nodeStack.pop();
+                    
                     currentNode.label = "Match: " + currentToken.lexeme;
+                    currentNode.lineInfo = currentToken.line; // Set the correct dynamic source code line
                     
                     currentToken = getNextToken();
                     a = getLookahead(currentToken);
@@ -166,24 +177,27 @@ public void parse() throws Exception {
                 Map<String, String[]> row = table.get(X);
                 if (row != null && row.containsKey(a)) {
                     String[] production = row.get(a);
+                    
+                    // Pop non-terminal state cleanly
                     stack.pop();
+                    ParseTreeNode currentNode = nodeStack.pop();
                     
                     if (production.length > 0) {
-                        //  Create children nodes and push them to nodeStack in REVERSE
-                        List<ParseTreeNode> children = new ArrayList<>();
+                        List<ParseTreeNode> childrenList = new ArrayList<>();
                         for (String symbol : production) {
-                            ParseTreeNode child = new ParseTreeNode(symbol);
+                            ParseTreeNode child = new ParseTreeNode(symbol, currentToken.line);
                             currentNode.addChild(child);
-                            children.add(child);
+                            childrenList.add(child);
                         }
                         
+                        // FIX: Push to stacks in REVERSE order to maintain proper AST layout direction
                         for (int i = production.length - 1; i >= 0; i--) {
                             stack.push(production[i]);
-                            nodeStack.push(children.get(i)); // Keep tree stack in sync
+                            nodeStack.push(childrenList.get(i)); 
                         }
                     } else {
-                        //Handle Epsilon in the tree
-                        currentNode.addChild(new ParseTreeNode("ε"));
+                        // Handle dynamic Epsilon visual node mapping injection
+                        currentNode.addChild(new ParseTreeNode("ε", currentToken.line));
                     }
                     
                     parseTreeLog.append(X + " -> " + (production.length == 0 ? "ε" : String.join(" ", production)) + "\n");
@@ -194,68 +208,56 @@ public void parse() throws Exception {
         }
 
         if (stack.peek().equals("$") && a.equals("$")) {
-           parseTreeLog.setLength(0);
-           parseTreeLog.append("Parsing Successful!\n\n--- Visual Parse Tree ---\n");
-    
-       // Call the  printTree 
-        parseTreeLog.append(root.printTree("", true));
-
+            parseTreeLog.setLength(0);
+            parseTreeLog.append("Parsing Successful!\n\n--- Visual Parse Tree ---\n");
+            parseTreeLog.append(root.printTree("", true));
         } else {
             throw new Exception("Syntax Error: Stack finished but input remains.");
         }
     }
 
-
     private KidCode.Token getNextToken() {
         if (index < tokens.size()) {
             return tokens.get(index++);
         }
-        // Return a virtual $ token if we run out of tokens
         return new KidCode.Token(KidCode.TokenType.EOF, -1, "$");
     }
 
+    private String getLookahead(KidCode.Token t) {
+        if (t.lexeme.equals("$")) return "$";
 
-private String getLookahead(KidCode.Token t) {
-    if (t.lexeme.equals("$")) return "$";
+        if (t.type == KidCode.TokenType.KEYWORD || 
+            t.type == KidCode.TokenType.OPERATOR || 
+            t.type == KidCode.TokenType.DELIMITER) {
+            return t.lexeme.toUpperCase();
+        }
+         
+        if (t.type == KidCode.TokenType.INTEGER) return "INT"; 
+        if (t.type == KidCode.TokenType.FLOAT)   return "FLOAT";
+        if (t.type == KidCode.TokenType.STRING)  return "STRING";
+        if (t.type == KidCode.TokenType.IDENTIFIER) return "ID";
 
-    // 1. Keywords, Operators, and Delimiters use their Lexeme (UPPERCASE)
-    // This handles "START", "THEEND", "NUMBER", "IF", "(", "=", etc
-    if (t.type == KidCode.TokenType.KEYWORD || 
-        t.type == KidCode.TokenType.OPERATOR || 
-        t.type == KidCode.TokenType.DELIMITER) {
-        return t.lexeme.toUpperCase();
+        return t.type.toString();
+    }
+      
+    private boolean isTerminal(String s) {
+        return !table.containsKey(s);
     }
 
-     
-    // 2. Map Literal Types to match your Parsing Table keys
-    if (t.type == KidCode.TokenType.INTEGER) return "INT"; 
-    if (t.type == KidCode.TokenType.FLOAT)   return "FLOAT";
-    if (t.type == KidCode.TokenType.STRING)  return "STRING";
-    if (t.type == KidCode.TokenType.IDENTIFIER) return "ID";
-
-    return t.type.toString();
-
-    
-}
-  
-private boolean isTerminal(String s) {
-    // If it's a key in the table, it's a Non-Terminal (should be expanded)
-    // Otherwise, it's a Terminal (should be matched)
-    return !table.containsKey(s);
-}
-
- public String getParseTree() {
+    public String getParseTree() {
         return parseTreeLog.toString();
     }
-
 }
 
+// ── Updated ParseTreeNode Supporting Semantic Metadata Line Checks ───────────
 class ParseTreeNode {
     String label;
+    int lineInfo; // Added to satisfy semantic verification checks
     List<ParseTreeNode> children = new ArrayList<>();
 
-    public ParseTreeNode(String label) {
+    public ParseTreeNode(String label, int lineInfo) {
         this.label = label;
+        this.lineInfo = lineInfo;
     }
 
     public void addChild(ParseTreeNode child) {
@@ -265,14 +267,12 @@ class ParseTreeNode {
     public String printTree(String prefix, boolean isLast) {
         StringBuilder sb = new StringBuilder();
         
-       
         if (!label.equals("Program")) {
             sb.append(prefix).append(isLast ? "└── " : "├── ").append(label).append("\n");
         } else {
             sb.append(label).append("\n");
         }
 
-        // Calculate new prefix for children
         String newPrefix = prefix;
         if (!label.equals("Program")) {
             newPrefix += isLast ? "    " : "│   ";
