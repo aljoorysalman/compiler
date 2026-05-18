@@ -20,7 +20,7 @@ public class KidCodeParser {
     }
 
     private void initializeTable() {
-        String[] firstStmt = {"NUMBER", "NAME", "FACT", "ID", "IF", "REPEAT", "WHILE", "SAY", "DO", "GIVE", "SKILL"};
+        String[] firstStmt = {"NUMBER", "NAME", "FACT", "ID", "IF", "REPEAT", "WHILE", "SAY", "DO", "GIVE", "SKILL", "STRING"};
         String[] followStmtList = {"THEEND", "DONE", "ELSE"};
 String[] followExpr = {
     // Delimiters & Structural Block Boundaries
@@ -36,7 +36,7 @@ String[] followExpr = {
 String[] followPower = {"+", "-", "*", "/", "%", ")", "DONE", ",", "THEEND", "THEN", "DO", "NUMBER", "NAME", "FACT", "ID", "SAY", "IF", "WHILE", "REPEAT", "BACK", "GIVE", "GIVES", "==", "!=", "<", ">", "<=", ">=","SKILL"};
 String[] followTerm  = {"+", "-", ")", "DONE", ",", "THEEND", "THEN", "DO", "NUMBER", "NAME", "FACT", "ID", "SAY", "IF", "WHILE", "REPEAT", "BACK", "GIVE", "GIVES", "==", "!=", "<", ">", "<=", ">=","SKILL"};
       addRule("Stmt", new String[]{"SKILL"}, new String[]{"SkillDecl"});
-
+addRule("Stmt", new String[]{"STRING"}, new String[]{"Decl"});
 // 2. Program Structure
         addRule("Program", new String[]{"START"}, new String[]{"START", "StmtList", "THEEND", "Skills"});
         addRule("Skills", new String[]{"SKILL"}, new String[]{"SkillDecl", "Skills"});
