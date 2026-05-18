@@ -52,7 +52,7 @@ public class KidCode {
         public int totalLexemes = 0;
         private static final Set<String> KEYWORDS = new HashSet<>(Arrays.asList(
                 "start", "theend", "if", "then", "else", "repeat", "while", "do", "done", "skill", "gives", "give",
-                "back", "say", "ask", "number", "name", "fact", "void", "and", "or", "not",
+                "back", "say", "ask", "number", "float", "name", "fact", "void", "and", "or", "not",
                 "true", "false"));
         // regular expression part
         private static final String LETTER = "[A-Za-z]";

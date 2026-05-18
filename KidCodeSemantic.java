@@ -90,9 +90,10 @@ public class KidCodeSemantic {
 
      
     private void handleIfStatement(ParseTreeNode node) {
-        ParseTreeNode condition = findChildByLabel(node, "Expr");
-        if (condition != null) visit(condition);
-
+    if (node != null && node.children.size() > 2) {
+        ParseTreeNode condition = node.children.get(2); 
+        inferExpressionType(condition);
+    }
         // Generate unique block name using our relocated main counter variable
         blockCounter++;
         enterScope("IF_" + blockCounter); 
@@ -369,123 +370,162 @@ private void handleVariableDeclaration(ParseTreeNode node) {
         }
         return null; // Variable not declared anywhere accessible
     }
-
-
 private String inferExpressionType(ParseTreeNode node) {
     if (node == null) return "unknown";
 
     String label = node.label;
 
     // ─── RULES 1, 2, 3, & 4: Terminal Leaf Node Analysis ───
-if (label.startsWith("Match:")) {
-    String rawVal = label.substring(6).trim();
-    
-    // 1. Strict String Literal (With or without Quotes)
-    if (rawVal.startsWith("\"") && rawVal.endsWith("\"")) {
-        return "string";
-    }
-    
-    // 2. Boolean Logic Check
-    if (rawVal.equalsIgnoreCase("TRUE") || rawVal.equalsIgnoreCase("FALSE")) {
-        return "fact";
-    }
-    
-    // 3. Numeric Literal Check
-    if (rawVal.matches("-?\\d+(\\.\\d+)?")) {
-        return "number";
-    }
-    
-    // 4. Fallback String Check: If it's a raw alphabetical string value that isn't a declared variable
-    SymbolEntry entry = lookupVariable(rawVal);
-    if (entry != null) {
-        return entry.type.toLowerCase();
-    }
-    
-    // If it's regular text words and NOT a registered variable name, it's a raw string value!
-    if (rawVal.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
-        return "string"; 
-    }
+    if (label.startsWith("Match:")) {
+        String rawVal = label.substring(6).trim();
 
-    return "unknown";
-}
-
-    //  RULE 8: Skill / Function Call Evaluation 
-    if (label.equals("SkillCall") || label.equals("MethodCall") || label.equals("FuncCall")) {
-        // Child 0 is usually the DO keyword terminal, Child 1 is the Skill name ID
-        ParseTreeNode idNode = node.children.size() > 1 ? node.children.get(1) : node.children.get(0);
-        String skillName = extractValue(idNode);
-        SymbolEntry skillEntry = lookupVariable(skillName);
-        
-        if (skillEntry != null && skillEntry.type.equals("skill")) {
-            return skillEntry.returnType.toLowerCase(); // Inferred return data type profile
+        // 1. Check for variable in symbol table first using lowercase normalization
+        SymbolEntry entry = lookupVariable(rawVal.toLowerCase());
+        if (entry != null) {
+            return entry.type.toLowerCase();
         }
+
+        // 2. Strict String Literal (With or without Quotes) -> Returns lowercase "name"
+        if (rawVal.startsWith("\"") && rawVal.endsWith("\"")) {
+            return "name";
+        }
+
+        // 3. Boolean Logic Check
+        if (rawVal.equalsIgnoreCase("TRUE") || rawVal.equalsIgnoreCase("FALSE")) {
+            return "fact";
+        }
+
+        // 4. A. Check for explicit Float / Decimal literals (contains a dot)
+        if (rawVal.matches("-?\\d+\\.\\d+")) {
+            return "float";
+        }
+
+        // 4. B. Check for pure Integer literals (digits only, no dot)
+        if (rawVal.matches("-?\\d+")) {
+            return "number";
+        }
+
+        // 5. Fallback String Check: If it's a raw alphabetical identifier string but unregistered
+        if (rawVal.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+            return "name";
+        }
+
         return "unknown";
     }
 
-    //  RULES 5, 6, & 7: Binary Expression Node Processing 
-    if (label.equals("Expr") || label.equals("Term") || label.equals("Expr'") || label.equals("Term'")) {
-        
-        // Look for operational structural children configurations
-        if (node.children.size() >= 3) {
-            String leftType = inferExpressionType(node.children.get(0));
-            String operator = extractValue(node.children.get(1));
-            String rightType = inferExpressionType(node.children.get(2));
+    // ─── RULE 8: Skill / Function Call Evaluation ───
+    if (label.equalsIgnoreCase("SkillCall") || label.equalsIgnoreCase("MethodCall") || label.equalsIgnoreCase("FuncCall")) {
+        ParseTreeNode idNode = node.children.size() > 1 ? node.children.get(1) : node.children.get(0);
+        String skillName = extractValue(idNode);
 
-            // Rule 5: Arithmetic Rules
+        SymbolEntry skillEntry = lookupVariable(skillName.toLowerCase());
+        if (skillEntry != null && skillEntry.type.equalsIgnoreCase("skill")) {
+            return skillEntry.returnType.toLowerCase();
+        }
+
+        return "unknown";
+    }
+
+    // ─── RULES 5, 6, & 7: Binary Expression Node Processing ───
+    String lowerLabel = label.toLowerCase();
+    
+    if (lowerLabel.equals("expr") || lowerLabel.equals("term") || lowerLabel.equals("expr'") || lowerLabel.equals("term'") || lowerLabel.equals("boolexpr")) {
+        
+        // A. Handle LL(1) Operators inside Expr' and Term' branches completely!
+        if (node.children.size() >= 2 && (lowerLabel.equals("expr'") || lowerLabel.equals("term'"))) {
+            String operator = extractValue(node.children.get(0));
+
             if (operator.matches("[+\\-*/%]")) {
-                if (leftType.equals("number") && rightType.equals("number")) {
+                // Dig down into the sub-tree on the right side to extract its true data type profile
+                String rightType = inferExpressionType(node.children.get(1)).toLowerCase();
+
+                // If it resolves to an invalid type for math, throw the exception immediately
+                if (rightType.equals("name") || rightType.equals("fact")) {
+                    errors.add("Semantic Error at line " + extractLine(node) + ": Mathematical operations do not support combining numeric types with '" + rightType + "'.");
+                    return "unknown";
+                }
+                return rightType; // Bubble the type up if valid
+            }
+        }
+
+        // B. Flat Fallback Validation Layer (Standard Three-Operator/Children Branch)
+        if (node.children.size() >= 3) {
+            String leftType = inferExpressionType(node.children.get(0)).toLowerCase();
+            String rawOp = extractValue(node.children.get(1)).trim();
+            String rightType = inferExpressionType(node.children.get(2)).toLowerCase();
+
+            // DYNAMIC HELPER: If the operator node has a child (like Relop -> ==), dig down to get the raw symbol!
+            if (node.children.get(1).label.equalsIgnoreCase("Relop") && !node.children.get(1).children.isEmpty()) {
+                rawOp = extractValue(node.children.get(1).children.get(0)).trim();
+            }
+
+            // Clean up any "Match: " prefix left on operators
+            if (rawOp.startsWith("Match:")) {
+                rawOp = rawOp.substring(6).trim();
+            }
+
+            // Rule 5: Arithmetic Operations Check
+            if (rawOp.matches("[+\\-*/%]")) {
+                boolean isLeftNumeric = leftType.equals("number") || leftType.equals("float") || leftType.equals("int");
+                boolean isRightNumeric = rightType.equals("number") || rightType.equals("float") || rightType.equals("int");
+
+                if (isLeftNumeric && isRightNumeric) {
+                    if (leftType.equals("float") || rightType.equals("float")) {
+                        return "float";
+                    }
                     return "number";
                 } else if (!leftType.equals("unknown") && !rightType.equals("unknown")) {
-                    errors.add("Semantic Error: Mathematical operations do not support combining '" + leftType + "' and '" + rightType + "'.");
+                    errors.add("Semantic Error at line " + extractLine(node) + ": Mathematical operations do not support combining '" + leftType + "' and '" + rightType + "'.");
                     return "unknown";
                 }
             }
 
-            // Rule 6: Relational Operators Check
-            if (operator.matches("(<|>|<=|>=)")) {
-                if (leftType.equals("number") && rightType.equals("number")) {
-                    return "fact"; // Inferred to condition boolean logical type
+            // Rule 6: Relational Operators Check (Handles >, <, >=, <=)
+            if (rawOp.equals("<") || rawOp.equals(">") || rawOp.equals("<=") || rawOp.equals(">=")) {
+                boolean isLeftNumeric = leftType.equals("number") || leftType.equals("float") || leftType.equals("int");
+                boolean isRightNumeric = rightType.equals("number") || rightType.equals("float") || rightType.equals("int");
+
+                if (isLeftNumeric && isRightNumeric) {
+                    return "fact";
                 } else {
-                    errors.add("Semantic Error: Comparative sizing bounds cannot evaluate non-numeric objects.");
+                    errors.add("Semantic Error at line " + extractLine(node) + ": Comparative sizing bounds cannot evaluate non-numeric objects (Tried comparing '" + leftType + "' and '" + rightType + "').");
                     return "unknown";
                 }
             }
 
-            // Rule 7: Strict Value Equality Checks
-            if (operator.equals("==") || operator.equals("!=")) {
+            // Rule 7 Equality Checks (==, !=)
+            if (rawOp.equals("==") || rawOp.equals("!=")) {
                 if (leftType.equals(rightType) && !leftType.equals("unknown")) {
                     return "fact"; 
                 } else if (!leftType.equals("unknown") && !rightType.equals("unknown")) {
-                    errors.add("Semantic Error: Incompatible equality check. Cannot match a '" + leftType + "' against a '" + rightType + "'.");
+                    errors.add("Semantic Error at line " + extractLine(node) + ": Incompatible equality check. Cannot match a '" + leftType + "' against a '" + rightType + "'.");
                     return "unknown";
                 }
             }
         }
-    }
+    } // ◄ This brace now properly seals your whole lowerLabel expression validation block
 
-    // Pass structural navigation downward recursively if node is purely wrapper formatting
+    // ─── Recursive Downward Pipeline ───
     if (!node.children.isEmpty()) {
-        // Single child bypass optimization
         if (node.children.size() == 1) {
-            return inferExpressionType(node.children.get(0));
+            return inferExpressionType(node.children.get(0)).toLowerCase();
         }
-        
-        // Multi-child evaluation scanning fallbacks
+
+        // Loop through children to aggregate operational metrics
+        String inferredResult = "unknown";
+
         for (ParseTreeNode child : node.children) {
-            String childType = inferExpressionType(child);
+            String childType = inferExpressionType(child).toLowerCase();
+
             if (!childType.equals("unknown") && !childType.equals("operator")) {
-                return childType;
+                inferredResult = childType;
             }
         }
+        return inferredResult;
     }
 
     return "unknown";
 }
-
-
-
-
-
 
 
 }

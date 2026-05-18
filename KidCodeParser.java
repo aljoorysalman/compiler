@@ -19,118 +19,127 @@ public class KidCodeParser {
         return root;
     }
 
-    private void initializeTable() {
-        String[] firstStmt = {"NUMBER", "NAME", "FACT", "ID", "IF", "REPEAT", "WHILE", "SAY", "DO", "GIVE", "SKILL", "STRING"};
-        String[] followStmtList = {"THEEND", "DONE", "ELSE"};
+private void initializeTable() {
+    // ─── 1. Lookahead / Follow Set Token Collections ───
+    String[] firstFactor = {"ID", "INT", "FLOAT", "STRING", "TRUE", "FALSE", "(", "DO"};
+    String[] firstStmt = {"NUMBER", "FLOAT", "NAME", "FACT", "ID", "IF", "REPEAT", "WHILE", "SAY", "DO", "GIVE", "SKILL", "STRING"};
+    String[] followStmtList = {"THEEND", "DONE", "ELSE"};
+    
 String[] followExpr = {
-    // Delimiters & Structural Block Boundaries
     ")", "DONE", ",", "THEEND", "THEN", "DO", 
-    
-    // Relational Operators (Allows Expr' to yield gracefully inside conditions)
     "==", "!=", "<", ">", "<=", ">=", 
-    
-    // Next Statement Starters
-    "NUMBER", "NAME", "FACT", "ID", "SAY", "IF", "WHILE", "REPEAT", "BACK", "GIVE", "GIVES","SKILL"
+    "NUMBER", "FLOAT", "NAME", "FACT", "ID", "SAY", "IF", "WHILE", "REPEAT", "BACK", "GIVE", "GIVES", "SKILL", "STRING"
 };
 
-String[] followPower = {"+", "-", "*", "/", "%", ")", "DONE", ",", "THEEND", "THEN", "DO", "NUMBER", "NAME", "FACT", "ID", "SAY", "IF", "WHILE", "REPEAT", "BACK", "GIVE", "GIVES", "==", "!=", "<", ">", "<=", ">=","SKILL"};
-String[] followTerm  = {"+", "-", ")", "DONE", ",", "THEEND", "THEN", "DO", "NUMBER", "NAME", "FACT", "ID", "SAY", "IF", "WHILE", "REPEAT", "BACK", "GIVE", "GIVES", "==", "!=", "<", ">", "<=", ">=","SKILL"};
-      addRule("Stmt", new String[]{"SKILL"}, new String[]{"SkillDecl"});
-addRule("Stmt", new String[]{"STRING"}, new String[]{"Decl"});
-// 2. Program Structure
-        addRule("Program", new String[]{"START"}, new String[]{"START", "StmtList", "THEEND", "Skills"});
-        addRule("Skills", new String[]{"SKILL"}, new String[]{"SkillDecl", "Skills"});
-        addRule("Skills", new String[]{"$"}, new String[]{});
-      addRule("SkillDecl", new String[]{"SKILL"}, 
-    new String[]{"SKILL", "ID", "(", "ParamList", ")", "GIVES", "Type", "StmtList", "DONE"});
-        addRule("SkillCall", new String[]{"DO"}, new String[]{"DO", "ID", "(", "ArgList", ")"});
+String[] followPower = {
+    "+", "-", "*", "/", "%", ")", "DONE", ",", "THEEND", "THEN", "DO", 
+    "NUMBER", "NAME", "FLOAT", "FACT", "ID", "SAY", "IF", "WHILE", "REPEAT", 
+    "BACK", "GIVE", "GIVES", "==", "!=", "<", ">", "<=", ">=", "SKILL", "STRING"
+};
 
-        addRule("ArgList", new String[]{"ID","INT","FLOAT","STRING","TRUE","FALSE","("}, new String[]{"Expr", "ArgList'"});
-        addRule("ArgList", new String[]{")"}, new String[]{}); 
+String[] followTerm  = {
+    "+", "-", ")", "DONE", ",", "THEEND", "THEN", "DO", 
+    "NUMBER", "FLOAT", "NAME", "FACT", "ID", "SAY", "IF", "WHILE", "REPEAT", 
+    "BACK", "GIVE", "GIVES", "==", "!=", "<", ">", "<=", ">=", "SKILL", "STRING"
+};
 
-        addRule("ArgList'", new String[]{","}, new String[]{",", "Expr", "ArgList'"});
-        addRule("ArgList'", new String[]{")"}, new String[]{}); 
+String[] followAssignExprPrime = {
+    "+", "-", "*", "/", "%", ")", "DONE", ",", "THEEND", "theend", "THEN", "DO", 
+    "NUMBER", "FLOAT", "NAME", "FACT", "ID", "STRING",
+    "IF", "WHILE", "REPEAT", "SAY", "GIVE", "SKILL"
+}; 
 
-        addRule("ParamList", new String[]{"NUMBER","NAME","FACT"}, new String[]{"Type", "ID", "ParamList'"});
-        addRule("ParamList'", new String[]{","}, new String[]{",", "Type", "ID", "ParamList'"});
-        addRule("ParamList'", new String[]{")"}, new String[]{});  
-        
-        // 3. Statement List 
 
-        addRule("StmtList", firstStmt, new String[]{"Stmt", "StmtList"});
-        addRule("StmtList", followStmtList, new String[]{}); 
-        addRule("Stmt", new String[]{"GIVE"}, new String[]{"ReturnStmt"});
-        addRule("ReturnStmt", new String[]{"GIVE"}, new String[]{"GIVE", "BACK", "Expr"});
-        
-        // 4. Statement Types
-        addRule("Stmt", new String[]{"NUMBER", "NAME", "FACT"}, new String[]{"Decl"});
-        addRule("Stmt", new String[]{"ID"}, new String[]{"Assign"});
-        addRule("Stmt", new String[]{"IF"}, new String[]{"IfStmt"});
-        addRule("Stmt", new String[]{"REPEAT"}, new String[]{"RepeatStmt"});
-        addRule("Stmt", new String[]{"WHILE"}, new String[]{"WhileStmt"});
-        addRule("Stmt", new String[]{"SAY"}, new String[]{"SayStmt"});
-        addRule("Stmt", new String[]{"DO"}, new String[]{"SkillCall"});
 
-        // 5. Declaration & Assignment
-        addRule("Decl", new String[]{"NUMBER", "NAME", "FACT"}, new String[]{"Type", "ID", "=", "Expr"});
-        addRule("Assign", new String[]{"ID"}, new String[]{"ID", "=", "Expr"});
-        addRule("Type", new String[]{"NUMBER"}, new String[]{"NUMBER"});
-        addRule("Type", new String[]{"NAME"}, new String[]{"NAME"});
-        addRule("Type", new String[]{"FACT"}, new String[]{"FACT"});
+// ─── 2. Program Structural Components ───
+    addRule("Program", new String[]{"START"}, new String[]{"START", "StmtList", "THEEND", "Skills"});
+    addRule("Skills", new String[]{"SKILL"}, new String[]{"SkillDecl", "Skills"});
+    addRule("Skills", new String[]{"$"}, new String[]{});
+    addRule("SkillDecl", new String[]{"SKILL"}, new String[]{"SKILL", "ID", "(", "ParamList", ")", "GIVES", "Type", "StmtList", "DONE"});
+    addRule("SkillCall", new String[]{"DO"}, new String[]{"DO", "ID", "(", "ArgList", ")"});
 
-        // 6. Arithmetic (The Expression Chain)
-        String[] firstFactor = {"ID", "INT", "FLOAT", "STRING", "TRUE", "FALSE", "(", "DO"};
-       addRule("Expr", firstFactor, new String[]{"Term", "Expr'"});
+    // ─── 3. Parameters and Arguments ───
+    addRule("ArgList", new String[]{"ID", "INT", "FLOAT", "STRING", "TRUE", "FALSE", "("}, new String[]{"Expr", "ArgList'"});
+    addRule("ArgList", new String[]{")"}, new String[]{}); 
+    addRule("ArgList'", new String[]{","}, new String[]{",", "Expr", "ArgList'"});
+    addRule("ArgList'", new String[]{")"}, new String[]{}); 
+
+    // ─── 4. Type Layout Mapping Engine ───
+    addRule("Type", new String[]{"NUMBER"}, new String[]{"NUMBER"});
+    addRule("Type", new String[]{"FLOAT"}, new String[]{"FLOAT"});
+    addRule("Type", new String[]{"NAME"}, new String[]{"NAME"});
+    addRule("Type", new String[]{"FACT"}, new String[]{"FACT"});
+    addRule("Type", new String[]{"VOID"}, new String[]{"VOID"});
+
+    addRule("ParamList", new String[]{"NUMBER", "FLOAT", "NAME", "FACT"}, new String[]{"Type", "ID", "ParamList'"});
+    addRule("ParamList'", new String[]{","}, new String[]{",", "Type", "ID", "ParamList'"});
+    addRule("ParamList'", new String[]{")"}, new String[]{});  
+    
+    // ─── 5. Core Statement Routes ───
+    addRule("StmtList", firstStmt, new String[]{"Stmt", "StmtList"});
+    addRule("StmtList", followStmtList, new String[]{}); 
+    
+    addRule("Stmt", new String[]{"SKILL"}, new String[]{"SkillDecl"});
+    addRule("Stmt", new String[]{"STRING"}, new String[]{"Decl"});
+    addRule("Stmt", new String[]{"GIVE"}, new String[]{"ReturnStmt"});
+    addRule("Stmt", new String[]{"NUMBER", "FLOAT", "NAME", "FACT"}, new String[]{"Decl"});
+    addRule("Stmt", new String[]{"ID"}, new String[]{"Assign"});
+    addRule("Stmt", new String[]{"IF"}, new String[]{"IfStmt"});
+    addRule("Stmt", new String[]{"REPEAT"}, new String[]{"RepeatStmt"});
+    addRule("Stmt", new String[]{"WHILE"}, new String[]{"WhileStmt"});
+    addRule("Stmt", new String[]{"SAY"}, new String[]{"SayStmt"});
+    addRule("Stmt", new String[]{"DO"}, new String[]{"SkillCall"});
+
+    addRule("ReturnStmt", new String[]{"GIVE"}, new String[]{"GIVE", "BACK", "Expr"});
+    
+    // ─── 6. Variable Declarations & Assignments ───
+    addRule("Decl", new String[]{"NUMBER", "FLOAT", "NAME", "FACT"}, new String[]{"Type", "ID", "=", "AssignExpr"});
+    addRule("Assign", new String[]{"ID"}, new String[]{"ID", "=", "AssignExpr"});
   
-addRule("Expr'", new String[]{"+"}, new String[]{"+", "Term", "Expr'"});
-addRule("Expr'", new String[]{"-"}, new String[]{"-", "Term", "Expr'"});
-addRule("Expr'", followExpr, new String[]{}); // Expr' ends on actual statement boundaries
+    addRule("AssignExpr", firstFactor, new String[]{"Expr", "AssignExpr'"});
+    addRule("AssignExpr'", new String[]{"==", "!=", "<", ">", "<=", ">="}, new String[]{"Relop", "Expr"});
+    addRule("AssignExpr'", followAssignExprPrime, new String[]{}); 
+  
+    // ─── 7. Arithmetic Evaluation Stack (LL(1) Standard Chain) ───
+    addRule("Expr", firstFactor, new String[]{"Term", "Expr'"});
+    addRule("Expr'", new String[]{"+"}, new String[]{"+", "Term", "Expr'"});
+    addRule("Expr'", new String[]{"-"}, new String[]{"-", "Term", "Expr'"});
+    addRule("Expr'", followExpr, new String[]{}); 
 
-addRule("Term'", new String[]{"*"}, new String[]{"*", "Power", "Term'"});
-addRule("Term'", new String[]{"/"}, new String[]{"/", "Power", "Term'"});
-addRule("Term'", new String[]{"%"}, new String[]{"%", "Power", "Term'"});
-addRule("Term'", followTerm, new String[]{}); // Term' drops down to catch + and -
+    addRule("Term", firstFactor, new String[]{"Power", "Term'"});
+    addRule("Term'", new String[]{"*"}, new String[]{"*", "Power", "Term'"});
+    addRule("Term'", new String[]{"/"}, new String[]{"/", "Power", "Term'"});
+    addRule("Term'", new String[]{"%"}, new String[]{"%", "Power", "Term'"});
+    addRule("Term'", followTerm, new String[]{}); 
 
-addRule("Power'", new String[]{"^"}, new String[]{"^", "Factor", "Power'"});
-addRule("Power'", followPower, new String[]{}); // Power' drops down to catch *, /, %
-        // Core terms
-        addRule("Term", firstFactor, new String[]{"Power", "Term'"});
-        addRule("Term'", new String[]{"*"}, new String[]{"*", "Power", "Term'"});
-        addRule("Term'", new String[]{"/"}, new String[]{"/", "Power", "Term'"});
-        addRule("Term'", new String[]{"%"}, new String[]{"%", "Power", "Term'"});
-        addRule("Term'", followExpr, new String[]{}); 
+    addRule("Power", firstFactor, new String[]{"Factor", "Power'"});
+    addRule("Power'", new String[]{"^"}, new String[]{"^", "Factor", "Power'"});
+    addRule("Power'", followPower, new String[]{}); 
 
-        addRule("Power", firstFactor, new String[]{"Factor", "Power'"});
-        addRule("Power'", new String[]{"^"}, new String[]{"^", "Factor", "Power'"});
-        addRule("Power'", followExpr, new String[]{}); 
+    // ─── 8. Basic Factor Definitions ───
+    addRule("Factor", new String[]{"INT"}, new String[]{"INT"});
+    addRule("Factor", new String[]{"FLOAT"}, new String[]{"FLOAT"});
+    addRule("Factor", new String[]{"ID"}, new String[]{"ID"});
+    addRule("Factor", new String[]{"STRING"}, new String[]{"STRING"});
+    addRule("Factor", new String[]{"TRUE"}, new String[]{"TRUE"});
+    addRule("Factor", new String[]{"FALSE"}, new String[]{"FALSE"});
+    addRule("Factor", new String[]{"("}, new String[]{"(", "AssignExpr", ")"});
+    addRule("Factor", new String[]{"DO"}, new String[]{"SkillCall"});
 
-        // 7. Factor 
-        addRule("Factor", new String[]{"INT"}, new String[]{"INT"});
-        addRule("Factor", new String[]{"FLOAT"}, new String[]{"FLOAT"});
-        addRule("Factor", new String[]{"ID"}, new String[]{"ID"});
-        addRule("Factor", new String[]{"STRING"}, new String[]{"STRING"});
-        addRule("Factor", new String[]{"TRUE"}, new String[]{"TRUE"});
-        addRule("Factor", new String[]{"FALSE"}, new String[]{"FALSE"});
-        addRule("Factor", new String[]{"("}, new String[]{"(", "Expr", ")"});
-        addRule("Factor", new String[]{"DO"}, new String[]{"SkillCall"});
-
-        // 8. Control Flow & Output
-        addRule("SayStmt", new String[]{"SAY"}, new String[]{"SAY", "(", "Expr", ")"});
-        addRule("IfStmt", new String[]{"IF"}, new String[]{"IF", "(", "BoolExpr", ")", "THEN", "StmtList", "ElsePart", "DONE"});
-        addRule("ElsePart", new String[]{"ELSE"}, new String[]{"ELSE", "StmtList"});
-        addRule("ElsePart", new String[]{"DONE"}, new String[]{});
-        addRule("WhileStmt", new String[]{"WHILE"}, new String[]{"WHILE", "(", "BoolExpr", ")", "DO", "StmtList", "DONE"});
-        addRule("RepeatStmt", new String[]{"REPEAT"}, new String[]{"REPEAT", "(", "Expr", ")", "DO", "StmtList", "DONE"});
-
-
-        addRule("Type", new String[]{"NUMBER"}, new String[]{"NUMBER"});
-addRule("Type", new String[]{"NAME"}, new String[]{"NAME"});
-addRule("Type", new String[]{"FACT"}, new String[]{"FACT"});
-addRule("Type", new String[]{"VOID"}, new String[]{"VOID"});
-        // 9. Booleans
-        addRule("BoolExpr", firstFactor, new String[]{"Expr", "Relop", "Expr"});
-        addRule("Relop", new String[]{"==", "!=", "<", ">", "<=", ">="}, new String[]{"(Matching Relational Operator)"});
-    }
+    // ─── 9. Code Control Structures & Conditionals ───
+    addRule("SayStmt", new String[]{"SAY"}, new String[]{"SAY", "(", "Expr", ")"});
+    addRule("IfStmt", new String[]{"IF"}, new String[]{"IF", "(", "BoolExpr", ")", "THEN", "StmtList", "ElsePart", "DONE"});
+    addRule("ElsePart", new String[]{"ELSE"}, new String[]{"ELSE", "StmtList"});
+    addRule("ElsePart", new String[]{"DONE"}, new String[]{});
+    addRule("WhileStmt", new String[]{"WHILE"}, new String[]{"WHILE", "(", "BoolExpr", ")", "DO", "StmtList", "DONE"});
+    addRule("RepeatStmt", new String[]{"REPEAT"}, new String[]{"REPEAT", "(", "Expr", ")", "DO", "StmtList", "DONE"});
+    
+    // ─── 10. Logical Expression Elements ───
+    addRule("BoolExpr", firstFactor, new String[]{"Expr", "Relop", "Expr"});
+    
+    String[] relationalTerminals = {"==", "!=", "<", ">", "<=", ">="};
+    addRule("Relop", relationalTerminals, new String[]{"(Matching Relational Operator)"});
+}
 
     private void addRule(String nt, String[] terminals, String[] prod) {
         table.putIfAbsent(nt, new HashMap<>());
